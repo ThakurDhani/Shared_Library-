@@ -7,66 +7,96 @@ pipeline {
         booleanParam(name: 'RUN_COVERAGE_SCAN', defaultValue: true, description: 'Run Code Coverage Analysis')
     }
 
+    environment {
+        SONARQUBE_ENV = 'SonarQubeServer'  // Change if different
+        EMAIL_RECIPIENTS = 'sahilt537@gmail.com'
+    }
+
     stages {
-        stage('Checkout') {
+
+        stage('Checkout Code') {
             steps {
-                checkout scm
-                sh 'chmod +x gradlew'
+                git url: 'https://github.com/OT-MICROSERVICES/salary-api.git', branch: 'main'
             }
         }
 
         stage('Parallel Scans') {
             parallel {
                 stage('Code Stability') {
-                    when { expression { return params.RUN_STABILITY_SCAN } }
+                    when {
+                        expression { params.RUN_STABILITY_SCAN }
+                    }
                     steps {
-                        sh './gradlew test'
+                        echo "Running unit tests..."
+                        sh './gradlew test' // Or use mvn test if using Maven
                     }
                 }
-                stage('Code Quality') {
-                    when { expression { return params.RUN_QUALITY_SCAN } }
+
+                stage('Code Quality Analysis') {
+                    when {
+                        expression { params.RUN_QUALITY_SCAN }
+                    }
                     steps {
-                        sh './gradlew check'
+                        echo "Running SonarQube analysis..."
+                        withSonarQubeEnv("${SONARQUBE_ENV}") {
+                            sh './gradlew sonarqube'
+                        }
                     }
                 }
-                stage('Code Coverage') {
-                    when { expression { return params.RUN_COVERAGE_SCAN } }
+
+                stage('Code Coverage Analysis') {
+                    when {
+                        expression { params.RUN_COVERAGE_SCAN }
+                    }
                     steps {
+                        echo "Generating code coverage report..."
                         sh './gradlew jacocoTestReport'
                     }
                 }
             }
         }
 
-        stage('Generate Reports') {
-            steps {
-                archiveArtifacts artifacts: '**/build/reports/**', allowEmptyArchive: true
-            }
-        }
-
         stage('Approval Before Publish') {
             steps {
-                input message: 'Approve publishing?', ok: 'Publish Now'
+                timeout(time: 5, unit: 'MINUTES') {
+                    input message: 'Approve to publish the build?', ok: 'Approve'
+                }
             }
         }
 
         stage('Publish Artifacts') {
             steps {
-                sh './gradlew publish'
+                echo "Publishing artifacts..."
+                sh './gradlew build'
             }
         }
     }
 
     post {
         success {
-            mail to: 'sahilt537@gmail.com',
-                 subject: "Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "The build completed successfully.\n\nCheck details here: ${env.BUILD_URL}"
+            echo '✅ Build succeeded.'
+            emailext(
+                subject: "✅ Jenkins Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """<p>Build completed successfully.</p>
+                         <p><b>Project:</b> ${env.JOB_NAME}</p>
+                         <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                         <p><b>Link:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>""",
+                mimeType: 'text/html',
+                to: "${EMAIL_RECIPIENTS}"
+            )
         }
+
         failure {
-            mail to: 'sahilt537@gmail.com',
-                 subject: "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "The build failed.\n\nCheck details here: ${env.BUILD_URL}"
+            echo '❌ Build failed.'
+            emailext(
+                subject: "❌ Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """<p>Build failed.</p>
+                         <p><b>Project:</b> ${env.JOB_NAME}</p>
+                         <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                         <p><b>Link:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>""",
+                mimeType: 'text/html',
+                to: "${EMAIL_RECIPIENTS}"
+            )
         }
     }
 }
