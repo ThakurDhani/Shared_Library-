@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     parameters {
-        booleanParam(name: 'RUN_STABILITY_SCAN', defaultValue: true)
-        booleanParam(name: 'RUN_QUALITY_SCAN', defaultValue: true)
-        booleanParam(name: 'RUN_COVERAGE_SCAN', defaultValue: true)
+        booleanParam(name: 'RUN_STABILITY_SCAN', defaultValue: true, description: 'Run Code Stability Scan')
+        booleanParam(name: 'RUN_QUALITY_SCAN', defaultValue: true, description: 'Run Code Quality Analysis')
+        booleanParam(name: 'RUN_COVERAGE_SCAN', defaultValue: true, description: 'Run Code Coverage Analysis')
     }
 
     stages {
@@ -58,16 +58,14 @@ pipeline {
 
     post {
         success {
-            slackSend(channel: '#ci-notifications', message: "Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
-            mail to: 'team@example.com',
+            mail to: 'sahilt537@gmail.com',
                  subject: "Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "Build Success. View: ${env.BUILD_URL}"
+                 body: "The build completed successfully.\n\nCheck details here: ${env.BUILD_URL}"
         }
         failure {
-            slackSend(channel: '#ci-notifications', message: "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
-            mail to: 'team@example.com',
+            mail to: 'sahilt537@gmail.com',
                  subject: "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "Build Failed. View: ${env.BUILD_URL}"
+                 body: "The build failed.\n\nCheck details here: ${env.BUILD_URL}"
         }
     }
 }
