@@ -4,11 +4,24 @@ plugins {
     id 'checkstyle'
 }
 
+checkstyle {
+    toolVersion = '8.45.1'
+    config = rootProject.resources.text.fromFile('config/checkstyle/checkstyle.xml')
+}
+
 jacoco {
     toolVersion = "0.8.8"
 }
 
-checkstyle {
-    toolVersion = '8.45'
-    configFile = file('config/checkstyle/checkstyle.xml')
+test {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
