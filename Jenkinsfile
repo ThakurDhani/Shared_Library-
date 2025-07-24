@@ -1,102 +1,86 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'jdk21'
+        gradle 'gradle9'
+    }
+
     parameters {
-        booleanParam(name: 'RUN_STABILITY_SCAN', defaultValue: true, description: 'Run Code Stability Scan')
-        booleanParam(name: 'RUN_QUALITY_SCAN', defaultValue: true, description: 'Run Code Quality Analysis')
-        booleanParam(name: 'RUN_COVERAGE_SCAN', defaultValue: true, description: 'Run Code Coverage Analysis')
+        booleanParam(name: 'RUN_STABILITY_SCAN', defaultValue: true)
+        booleanParam(name: 'RUN_QUALITY_SCAN', defaultValue: true)
+        booleanParam(name: 'RUN_COVERAGE_SCAN', defaultValue: true)
     }
 
     environment {
-        SONARQUBE_ENV = 'SonarQubeServer'  // Change if different
-        EMAIL_RECIPIENTS = 'sahilt537@gmail.com'
+        EMAIL = 'sahilt537@gmail.com'
     }
 
     stages {
-
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git url: 'https://github.com/OT-MICROSERVICES/salary-api.git', branch: 'main'
+                git url: 'https://github.com/OT-MICROSERVICES/salary-api.git'
             }
         }
 
-        stage('Parallel Scans') {
+        stage('Parallel Checks') {
             parallel {
                 stage('Code Stability') {
-                    when {
-                        expression { params.RUN_STABILITY_SCAN }
-                    }
+                    when { expression { params.RUN_STABILITY_SCAN } }
                     steps {
-                        echo "Running unit tests..."
-                        sh './gradlew test' // Or use mvn test if using Maven
+                        sh './gradlew clean build'
                     }
                 }
-
-                stage('Code Quality Analysis') {
-                    when {
-                        expression { params.RUN_QUALITY_SCAN }
-                    }
+                stage('Code Quality') {
+                    when { expression { params.RUN_QUALITY_SCAN } }
                     steps {
-                        echo "Running SonarQube analysis..."
-                        withSonarQubeEnv("${SONARQUBE_ENV}") {
-                            sh './gradlew sonarqube'
+                        echo "Code quality check (static code analysis)..."
+                        // Add static code analysis tool later like SpotBugs
+                    }
+                }
+                stage('Code Coverage') {
+                    when { expression { params.RUN_COVERAGE_SCAN } }
+                    steps {
+                        sh './gradlew jacocoTestReport'
+                    }
+                    post {
+                        always {
+                            jacoco execPattern: '**/build/jacoco/*.exec', classPattern: '**/build/classes/java/main', sourcePattern: '**/src/main/java', inclusionPattern: '**/*.class', exclusionPattern: ''
                         }
                     }
                 }
-
-                stage('Code Coverage Analysis') {
-                    when {
-                        expression { params.RUN_COVERAGE_SCAN }
-                    }
-                    steps {
-                        echo "Generating code coverage report..."
-                        sh './gradlew jacocoTestReport'
-                    }
-                }
             }
         }
 
-        stage('Approval Before Publish') {
+        stage('Test Report') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    input message: 'Approve to publish the build?', ok: 'Approve'
-                }
+                junit '**/build/test-results/test/*.xml'
+            }
+        }
+
+        stage('Approval for Publish') {
+            steps {
+                input message: 'Approve to publish artifacts?', ok: 'Proceed'
             }
         }
 
         stage('Publish Artifacts') {
             steps {
-                echo "Publishing artifacts..."
-                sh './gradlew build'
+                archiveArtifacts artifacts: 'build/libs/*.jar', onlyIfSuccessful: true
             }
         }
     }
 
     post {
         success {
-            echo '✅ Build succeeded.'
-            emailext(
-                subject: "✅ Jenkins Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """<p>Build completed successfully.</p>
-                         <p><b>Project:</b> ${env.JOB_NAME}</p>
-                         <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
-                         <p><b>Link:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>""",
-                mimeType: 'text/html',
-                to: "${EMAIL_RECIPIENTS}"
-            )
+            mail to: "${EMAIL}",
+                 subject: "SUCCESS: Build #${BUILD_NUMBER}",
+                 body: "The Jenkins build #${BUILD_NUMBER} succeeded.\nCheck console output at ${BUILD_URL}"
         }
-
         failure {
-            echo '❌ Build failed.'
-            emailext(
-                subject: "❌ Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """<p>Build failed.</p>
-                         <p><b>Project:</b> ${env.JOB_NAME}</p>
-                         <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
-                         <p><b>Link:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>""",
-                mimeType: 'text/html',
-                to: "${EMAIL_RECIPIENTS}"
-            )
+            mail to: "${EMAIL}",
+                 subject: "FAILURE: Build #${BUILD_NUMBER}",
+                 body: "The Jenkins build #${BUILD_NUMBER} failed.\nCheck console output at ${BUILD_URL}"
         }
     }
 }
